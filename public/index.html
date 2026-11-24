@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Linkchecker beta</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #000;
+      color: #e4e4e7;
+      font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
+      -webkit-font-smoothing: antialiased;
+      padding: 4.5rem 1.5rem 6rem;
+    }
+    .wrap { max-width: 760px; margin: 0 auto; }
+
+    /* Title */
+    .title {
+      font-size: 1.25rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      color: #fff;
+      margin-bottom: 1.75rem;
+      display: flex;
+      align-items: baseline;
+      gap: 0.45rem;
+    }
+    .beta {
+      font-size: 0.72rem;
+      font-weight: 500;
+      color: #52525b;
+      letter-spacing: 0.02em;
+    }
+
+    /* Input */
+    textarea {
+      width: 100%;
+      background: #070708;
+      color: #fff;
+      border: 1px solid #18181b;
+      border-radius: 10px;
+      padding: 0.95rem 1rem;
+      font-size: 0.9rem;
+      line-height: 1.6;
+      resize: vertical;
+      transition: border-color 0.15s;
+    }
+    textarea::placeholder { color: #3f3f46; }
+    textarea:focus { outline: none; border-color: #3f3f46; }
+
+    .actions {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 0.75rem;
+    }
+    .btn {
+      background: #fff;
+      color: #000;
+      border: none;
+      border-radius: 7px;
+      padding: 0.48rem 1.15rem;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .btn:hover { opacity: 0.85; }
+    .btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+    .msg { margin-top: 1.5rem; font-size: 0.82rem; color: #f87171; }
+
+    /* Single Minimal Table */
+    .scroll {
+      overflow-x: auto;
+      margin-top: 3rem;
+    }
+    table { width: 100%; border-collapse: collapse; min-width: 640px; }
+    th {
+      text-align: left;
+      font-size: 0.68rem;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: #52525b;
+      padding: 0.75rem 0.4rem;
+      border-bottom: 1px solid #141416;
+    }
+    td {
+      padding: 0.85rem 0.4rem;
+      border-bottom: 1px solid #0e0e10;
+      font-size: 0.82rem;
+    }
+    tr:last-child td { border-bottom: none; }
+    .domain {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      color: #fff;
+      font-size: 0.84rem;
+    }
+
+    .ok  { color: #4ade80; font-size: 0.78rem; }
+    .no  { color: #f87171; font-size: 0.78rem; }
+    .err { color: #3f3f46; font-size: 0.78rem; }
+
+    .hidden { display: none; }
+    .cell-category {
+      display: block;
+      max-width: 150px;
+      margin-top: 0.25rem;
+      color: #71717a;
+      font-size: 0.66rem;
+      line-height: 1.25;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="title">Linkchecker <span class="beta">beta</span></div>
+
+    <textarea id="input" rows="3" placeholder="khanacademy.org&#10;google.com&#10;roblox.com"></textarea>
+    <div class="actions">
+      <button class="btn" id="btn" onclick="run()">Check</button>
+    </div>
+
+    <div id="msg" class="msg hidden"></div>
+
+    <div id="out" class="scroll hidden">
+      <table>
+        <thead>
+          <tr>
+            <th>Domain</th>
+            <th>Lightspeed</th>
+            <th>Linewize</th>
+            <th>Senso</th>
+            <th>LanSchool</th>
+            <th>Blocksi</th>
+            <th>Blocksi AI</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    const FILTERS = [
+      ["Lightspeed", "lightspeed"],
+      ["Linewize", "linewize"],
+      ["Senso", "senso"],
+      ["LanSchool", "lanschool"],
+      ["Blocksi", "blocksi"],
+      ["Blocksi AI", "blocksi_ai"],
+    ];
+
+    function getF(obj, label, key) {
+      return obj[label] || obj[key] || null;
+    }
+
+    function cell(f) {
+      if (!f) return `<span class="err">Unavailable</span>`;
+      const category = f.category
+        ? `<span class="cell-category">${f.category}</span>`
+        : "";
+      if (f.blocked === null || f.blocked === undefined) {
+        return `<span class="err">Unavailable</span>${category}`;
+      }
+      return f.blocked
+        ? `<span class="no">Blocked</span>${category}`
+        : `<span class="ok">Unblocked</span>${category}`;
+    }
+
+    async function run() {
+      const text = document.getElementById("input").value.trim();
+      const btn = document.getElementById("btn");
+      const msg = document.getElementById("msg");
+      const out = document.getElementById("out");
+
+      if (!text) return;
+
+      btn.disabled = true;
+      btn.textContent = "Checking...";
+      msg.classList.add("hidden");
+      out.classList.add("hidden");
+
+      try {
+        const res = await fetch("/api/check", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text })
+        });
+        const data = await res.json();
+
+        if (data.error) {
+          msg.textContent = data.error;
+          msg.classList.remove("hidden");
+          return;
+        }
+
+        document.getElementById("tbody").innerHTML = data.results.map(r => `
+          <tr>
+            <td class="domain">${r.domain}</td>
+            ${FILTERS.map(([label, key]) => `<td>${cell(getF(r.filters, label, key))}</td>`).join("")}
+          </tr>
+        `).join("");
+
+        out.classList.remove("hidden");
+      } catch (e) {
+        msg.textContent = "Error connecting to server.";
+        msg.classList.remove("hidden");
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Check";
+      }
+    }
+  </script>
+</body>
+</html>
