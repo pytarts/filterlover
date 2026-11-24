@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Teacher Link Filter Checker</title>
+  <script src="https://tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen p-6">
+  <div class="max-w-4xl mx-auto">
+    <header class="mb-8">
+      <h1 class="text-3xl font-bold text-slate-900">Classroom Link Filter Checker</h1>
+      <p class="text-slate-600 mt-1">Paste links or an entire assignment below to see how school filters categorize them.</p>
+    </header>
+
+    <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 mb-6">
+      <textarea id="urlInput" rows="5" 
+        class="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+        placeholder="Paste URLs here (e.g., khanacademy.org, youtube.com, coolmathgames.com) or paste any text containing links..."></textarea>
+      
+      <div class="mt-4 flex items-center justify-between">
+        <span class="text-xs text-slate-400">Checks up to 15 unique domains at a time.</span>
+        <button id="checkBtn" onclick="runCheck()" 
+          class="bg-blue-600 hover:bg-blue-700 text-white font-medium px-6 py-2.5 rounded-lg transition">
+          Check Links
+        </button>
+      </div>
+    </div>
+
+    <div id="statusMsg" class="hidden mb-4 p-4 rounded-lg text-sm"></div>
+
+    <div id="resultsContainer" class="hidden bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+      <table class="w-full text-left border-collapse">
+        <thead>
+          <tr class="bg-slate-100 border-b border-slate-200 text-sm text-slate-600">
+            <th class="p-4 font-semibold">Domain</th>
+            <th class="p-4 font-semibold">Lightspeed Category</th>
+            <th class="p-4 font-semibold">FortiGuard Category</th>
+          </tr>
+        </thead>
+        <tbody id="resultsBody" class="divide-y divide-slate-100 text-sm"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    const RISKY_KEYWORDS = ["game", "proxy", "social", "streaming", "adult", "chat", "unrated", "gambling", "malware", "vpn"];
+
+    function getBadgeColor(category) {
+      const lower = category.toLowerCase();
+      if (lower.includes("error") || lower.includes("captcha")) return "bg-slate-100 text-slate-600";
+      if (RISKY_KEYWORDS.some(word => lower.includes(word))) return "bg-red-100 text-red-700 font-medium";
+      if (lower.includes("education") || lower.includes("reference")) return "bg-emerald-100 text-emerald-700 font-medium";
+      return "bg-amber-100 text-amber-800";
+    }
+
+    async function runCheck() {
+      const text = document.getElementById("urlInput").value.trim();
+      const btn = document.getElementById("checkBtn");
+      const status = document.getElementById("statusMsg");
+      const container = document.getElementById("resultsContainer");
+      const tbody = document.getElementById("resultsBody");
+
+      if (!text) return;
+
+      btn.disabled = true;
+      btn.textContent = "Checking...";
+      status.classList.add("hidden");
+      container.classList.add("hidden");
+      tbody.innerHTML = "";
+
+      try {
+        const res = await fetch("/api/check", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text })
+        });
+        const data = await res.json();
+
+        if (data.error) {
+          status.textContent = data.error;
+          status.className = "mb-4 p-4 rounded-lg text-sm bg-red-50 text-red-700";
+          status.classList.remove("hidden");
+        } else {
+          data.results.forEach(row => {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+              <td class="p-4 font-mono text-slate-900">${row.domain}</td>
+              <td class="p-4"><span class="px-2.5 py-1 rounded-full text-xs ${getBadgeColor(row.lightspeed)}">${row.lightspeed}</span></td>
+              <td class="p-4"><span class="px-2.5 py-1 rounded-full text-xs ${getBadgeColor(row.fortiguard)}">${row.fortiguard}</span></td>
+            `;
+            tbody.appendChild(tr);
+          });
+          container.classList.remove("hidden");
+        }
+      } catch (err) {
+        status.textContent = "Something went wrong connecting to the backend.";
+        status.className = "mb-4 p-4 rounded-lg text-sm bg-red-50 text-red-700";
+        status.classList.remove("hidden");
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Check Links";
+      }
+    }
+  </script>
+</body>
+</html>
